@@ -1,0 +1,22 @@
+import { Router } from 'express';
+import authRoutes from './auth.routes.js';
+import machinesRoutes from './machines.routes.js';
+import sensorsRoutes from './sensors.routes.js';
+import predictionsRoutes from './predictions.routes.js';
+import maintenanceRoutes from './maintenance.routes.js';
+import reportsRoutes from './reports.routes.js';
+import alertsRoutes from './alerts.routes.js';
+
+const router = Router();
+
+router.use('/auth', authRoutes);
+router.use('/machines', machinesRoutes);
+router.use('/sensors', sensorsRoutes);
+router.use('/predictions', predictionsRoutes);
+router.use('/maintenance', maintenanceRoutes);
+router.use('/reports', reportsRoutes);
+router.use('/alerts', alertsRoutes);
+
+export default router;
+
+
