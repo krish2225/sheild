@@ -40,4 +40,21 @@ export const deleteMachine = async (req, res) => {
   return ok(res, { deleted: true });
 };
 
+export const updateMachineThresholds = async (req, res) => {
+  const { thresholds, maintenanceHead, alertSettings } = req.body;
+  
+  const machine = await Machine.findByIdAndUpdate(
+    req.params.id,
+    { 
+      thresholds: thresholds || {},
+      maintenanceHead: maintenanceHead || {},
+      alertSettings: alertSettings || {}
+    },
+    { new: true }
+  );
+  
+  if (!machine) return notFound(res, 'Machine not found');
+  return ok(res, { machine });
+};
+
 

@@ -3,14 +3,45 @@
 html, body, #root {
   height: 100%;
 }
+
 body {
   background-color: #020617; /* slate-950 */
   color: #e2e8f0; /* slate-200 */
   font-size: 16px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
 
 .app-gradient {
   background: radial-gradient(1200px 600px at 0% 0%, rgba(34,197,94,0.08), transparent 60%),
               radial-gradient(800px 400px at 100% 0%, rgba(56,189,248,0.08), transparent 60%),
               radial-gradient(600px 300px at 50% 100%, rgba(59,130,246,0.07), transparent 60%);
+}
+
+/* Professional scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Enhanced shadows and effects */
+.shadow-professional {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.glass-effect {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }

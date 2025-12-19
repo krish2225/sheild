@@ -6,6 +6,7 @@ import predictionsRoutes from './predictions.routes.js';
 import maintenanceRoutes from './maintenance.routes.js';
 import reportsRoutes from './reports.routes.js';
 import alertsRoutes from './alerts.routes.js';
+import feedbackRoutes from './feedback.routes.js';
 
 const router = Router();
 
@@ -16,6 +17,7 @@ router.use('/predictions', predictionsRoutes);
 router.use('/maintenance', maintenanceRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/alerts', alertsRoutes);
+router.use('/feedback', feedbackRoutes);
 
 export default router;
 

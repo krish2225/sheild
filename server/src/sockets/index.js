@@ -1,4 +1,6 @@
 import { Server } from 'socket.io';
+import { sendThresholdAlertEmail, sendMaintenanceHeadNotification } from '../utils/emailService.js';
+import Machine from '../models/Machine.js';
 
 export const initializeSockets = (httpServer, logger) => {
   const io = new Server(httpServer, {
@@ -37,7 +39,7 @@ export const initializeSockets = (httpServer, logger) => {
 
   // Mock emitter for demo: broadcasts random sensor data every 2s
   const machineIds = ['M-1001', 'M-1002', 'M-1003'];
-  setInterval(() => {
+  setInterval(async () => {
     const payload = machineIds.map((id, idx) => {
       // Generate values that will ensure multiple machines trigger alerts
       // Machine 1: Moderate risk (high severity)
@@ -58,30 +60,96 @@ export const initializeSockets = (httpServer, logger) => {
     });
     sensorsNamespace.emit('sensor_update', payload);
 
-    const highRisk = payload.filter((p) => p.healthScore < 40);
-    console.log('Health scores:', payload.map(p => ({ machineId: p.machineId, healthScore: p.healthScore })));
-    console.log('High risk machines:', highRisk.length);
-    if (highRisk.length) {
-      highRisk.forEach((p, idx) => {
-        // Create different alert messages for variety
-        const alertMessages = [
-          `Low health score: ${p.healthScore}`,
-          `High vibration detected: ${p.vibration} mm/s`,
-          `Temperature critical: ${p.temperature}°C`,
-          `Machine performance degraded`,
-          `Maintenance required soon`
-        ];
-        
-        const alert = {
+    // Check thresholds for each machine and create detailed alerts
+    for (const p of payload) {
+      let alertTriggered = false;
+      let alertData = null;
+      
+      // Check temperature threshold
+      if (p.temperature > 85) {
+        alertData = {
           machineId: p.machineId,
-          severity: p.healthScore < 25 ? 'critical' : 'high',
-          message: alertMessages[idx % alertMessages.length],
+          severity: p.temperature > 95 ? 'critical' : 'high',
+          message: `Temperature critical: ${p.temperature}°C`,
           timestamp: new Date().toISOString(),
           status: 'open',
+          sensorReadings: {
+            temperature: p.temperature,
+            vibration: p.vibration,
+            current: p.current,
+            healthScore: p.healthScore
+          },
+          thresholdValue: 85,
+          thresholdType: 'temperature',
+          maintenanceHeadNotified: false
         };
-        console.log('Emitting alert:', alert);
-        alertsNamespace.emit('alert', alert);
-      });
+        alertTriggered = true;
+      }
+      // Check vibration threshold
+      else if (p.vibration > 30) {
+        alertData = {
+          machineId: p.machineId,
+          severity: p.vibration > 40 ? 'critical' : 'high',
+          message: `High vibration detected: ${p.vibration} mm/s`,
+          timestamp: new Date().toISOString(),
+          status: 'open',
+          sensorReadings: {
+            temperature: p.temperature,
+            vibration: p.vibration,
+            current: p.current,
+            healthScore: p.healthScore
+          },
+          thresholdValue: 30,
+          thresholdType: 'vibration',
+          maintenanceHeadNotified: false
+        };
+        alertTriggered = true;
+      }
+      // Check health score threshold
+      else if (p.healthScore < 40) {
+        alertData = {
+          machineId: p.machineId,
+          severity: p.healthScore < 25 ? 'critical' : 'high',
+          message: `Low health score: ${p.healthScore}`,
+          timestamp: new Date().toISOString(),
+          status: 'open',
+          sensorReadings: {
+            temperature: p.temperature,
+            vibration: p.vibration,
+            current: p.current,
+            healthScore: p.healthScore
+          },
+          thresholdValue: 40,
+          thresholdType: 'healthScore',
+          maintenanceHeadNotified: false
+        };
+        alertTriggered = true;
+      }
+      
+      if (alertTriggered && alertData) {
+        console.log('Emitting detailed alert:', alertData);
+        alertsNamespace.emit('alert', alertData);
+        
+        // Send email notification to maintenance head (async operation)
+        (async () => {
+          try {
+            const machine = await Machine.findOne({ machineId: p.machineId });
+            if (machine && machine.maintenanceHead && machine.maintenanceHead.email && machine.alertSettings?.notifyMaintenanceHead) {
+              await sendThresholdAlertEmail(alertData, machine.maintenanceHead);
+              console.log(`Email sent to maintenance head for machine ${p.machineId}`);
+            }
+          } catch (emailError) {
+            console.error('Error sending email notification:', emailError);
+          }
+        })();
+        
+        // Emit maintenance notification
+        alertsNamespace.emit('maintenance_alert', {
+          ...alertData,
+          maintenanceHeadNotified: true,
+          notificationSentAt: new Date().toISOString()
+        });
+      }
     }
   }, 2000);
 
