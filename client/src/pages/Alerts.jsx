@@ -1,130 +1,248 @@
-import { useEffect, useState } from 'react'
-import { api } from '../lib/api'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import { useEffect, useState, useRef } from 'react'
+import { gsap } from 'gsap'
+import { subscribeToDeviceData } from '../services/firebase'
+import { getHealthStatus, generateFeatureWarnings, formatTimestamp } from '../services/statusLogic'
+import { getAllThresholds, updateThreshold } from '../services/thresholds'
+import AlertTable from '../components/AlertTable'
 
 export default function Alerts() {
+  const [deviceData, setDeviceData] = useState(null)
   const [alerts, setAlerts] = useState([])
-  const [rule, setRule] = useState({ machineId: '', threshold: 40, severity: 'high', recipients: '' })
+  const [thresholds, setThresholds] = useState(getAllThresholds())
+  const [editingThreshold, setEditingThreshold] = useState(null)
+  const containerRef = useRef(null)
+  const thresholdRef = useRef(null)
+  const statusRef = useRef(null)
 
-  const load = () => api.get('/alerts').then(({ data }) => setAlerts(data.data.alerts || []))
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let unsubscribe = null
 
-  const saveRule = async (e) => {
-    e.preventDefault()
-    try {
-      console.log('Saving alert rule:', rule)
-      await api.post('/alerts', { 
-        machineId: rule.machineId, 
-        message: `Rule set: threshold ${rule.threshold}`, 
-        severity: rule.severity, 
-        recipients: rule.recipients ? rule.recipients.split(',').map(s=>s.trim()) : []
+    const setupSubscription = () => {
+      unsubscribe = subscribeToDeviceData('PM_001', (data) => {
+        if (data) {
+          setDeviceData(data)
+
+          // Generate alerts based on current data
+          const currentThresholds = getAllThresholds()
+          const warnings = generateFeatureWarnings(data.features || {}, currentThresholds)
+          const healthStatus = getHealthStatus(data.edge_health || 0)
+
+          const newAlerts = []
+
+          // Feature warnings
+          warnings.forEach((warning, index) => {
+            newAlerts.push({
+              id: `warning-${data.timestamp}-${index}`,
+              message: warning.message,
+              severity: warning.severity,
+              timestamp: data.timestamp * 1000,
+              type: 'feature_warning',
+              feature: warning.feature
+            })
+          })
+
+          // Health status alerts
+          if (healthStatus.severity === 'high') {
+            newAlerts.push({
+              id: `health-${data.timestamp}`,
+              message: `Machine health is ${healthStatus.label.toLowerCase()}. Immediate attention required.`,
+              severity: 'high',
+              timestamp: data.timestamp * 1000,
+              type: 'health_status'
+            })
+          } else if (healthStatus.severity === 'medium') {
+            newAlerts.push({
+              id: `health-${data.timestamp}`,
+              message: `Machine health is ${healthStatus.label.toLowerCase()}. Monitor closely.`,
+              severity: 'medium',
+              timestamp: data.timestamp * 1000,
+              type: 'health_status'
+            })
+          }
+
+          setAlerts(prev => {
+            // Merge new alerts, avoiding duplicates
+            const existingIds = new Set(prev.map(a => a.id))
+            const uniqueNewAlerts = newAlerts.filter(a => !existingIds.has(a.id))
+            return [...prev, ...uniqueNewAlerts]
+              .sort((a, b) => b.timestamp - a.timestamp)
+              .slice(0, 100) // Keep last 100 alerts
+          })
+        }
       })
-      console.log('Alert rule saved successfully')
-      load()
-    } catch (error) {
-      console.error('Error saving alert rule:', error)
-      alert('Error saving alert rule: ' + (error.response?.data?.message || error.message))
+    }
+
+    setupSubscription()
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe()
     }
   }
+  }, [])
 
-  const remove = async (id) => {
-    try {
-      await api.delete(`/alerts/${id}`)
-      load()
-    } catch (error) {
-      alert('Error deleting alert: ' + (error.response?.data?.message || error.message))
-    }
+  // GSAP animations - only run once on initial load
+  const hasAnimatedRef = useRef(false)
+  useEffect(() => {
+    if (hasAnimatedRef.current) return
+
+    hasAnimatedRef.current = true
+
+    const ctx = gsap.context(() => {
+      if (thresholdRef.current) {
+        gsap.fromTo(thresholdRef.current, {
+          opacity: 0,
+          y: 20
+        }, {
+          opacity: 1,
+          y: 0,
+          duration: 0.6,
+          ease: 'power2.out'
+        })
+      }
+
+      if (statusRef.current) {
+        gsap.fromTo(statusRef.current, {
+          opacity: 0,
+          y: 20
+        }, {
+          opacity: 1,
+          y: 0,
+          duration: 0.6,
+          delay: 0.2,
+          ease: 'power2.out'
+        })
+      }
+    }, containerRef)
+
+    return () => ctx.revert()
+  }, [])
+
+  const handleThresholdUpdate = (featureName, value) => {
+    updateThreshold(featureName, parseFloat(value))
+    setThresholds(getAllThresholds())
+    setEditingThreshold(null)
+  }
+
+  const handleAcknowledge = (alertId) => {
+    // In production, this would call backend API
+    console.log('Alert acknowledged:', alertId)
   }
 
   return (
-    <div className="p-8 space-y-8">
-      <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-6 shadow-lg">
-        <h2 className="text-xl font-semibold text-slate-200 mb-4">Create Alert Rule</h2>
-        <form onSubmit={saveRule} className="grid md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Machine ID</label>
-            <input 
-              placeholder="Enter Machine ID" 
-              value={rule.machineId} 
-              onChange={(e)=>setRule({...rule, machineId:e.target.value})} 
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-slate-200 placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors"
-            />
+    <div ref={containerRef} className="p-8 space-y-8">
+      {/* Threshold Configuration */}
+      <div ref={thresholdRef} className="bg-slate-900 border-2 border-slate-600 rounded-xl p-6 shadow-xl">
+        <h2 className="text-xl font-semibold text-white mb-4">Alert Thresholds</h2>
+        <p className="text-sm text-white mb-6">
+          Configure thresholds for sensor readings. Alerts will be generated when values exceed these limits.
+        </p>
+        <div className="grid md:grid-cols-3 gap-4">
+          {Object.entries(thresholds).map(([feature, value]) => (
+            <div key={feature} className="bg-slate-900 border-2 border-slate-600 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-white capitalize">
+                  {feature.replace('_', ' ')}
+                </label>
+                {editingThreshold === feature ? (
+                  <button
+                    onClick={() => setEditingThreshold(null)}
+                    className="text-xs text-slate-400 hover:text-slate-300"
+                  >
+                    Cancel
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setEditingThreshold(feature)}
+                    className="text-xs text-cyan-400 hover:text-cyan-300"
+                  >
+                    Edit
+                  </button>
+                )}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Threshold</label>
+              {editingThreshold === feature ? (
+                <div className="flex gap-2">
             <input 
               type="number" 
-              placeholder="40" 
-              value={rule.threshold} 
-              onChange={(e)=>setRule({...rule, threshold:e.target.value})} 
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-slate-200 placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Severity</label>
-            <select 
-              value={rule.severity} 
-              onChange={(e)=>setRule({...rule, severity:e.target.value})} 
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors"
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
-          </div>
-          <div className="flex items-end">
-            <button className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium rounded-lg px-6 py-3 transition-colors shadow-lg hover:shadow-xl">
-              Save Rule
-            </button>
-          </div>
-        </form>
+                    step="0.1"
+                    defaultValue={value}
+                    onBlur={(e) => handleThresholdUpdate(feature, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleThresholdUpdate(feature, e.target.value)
+                      }
+                    }}
+                    className="w-full bg-slate-900 border-2 border-slate-700 rounded px-3 py-2 text-white text-sm focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                    autoFocus
+                  />
+                </div>
+              ) : (
+                <div className="text-2xl font-bold text-white">{value}</div>
+              )}
+              {deviceData && deviceData.features && (
+                <div className="text-xs text-slate-400 mt-2">
+                  Current: {deviceData.features[feature]?.toFixed(2) || 'N/A'}
+                  {deviceData.features[feature] > value && (
+                    <span className="text-yellow-400 ml-2">⚠ Exceeded</span>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-6 shadow-lg">
-        <h2 className="text-xl font-semibold text-slate-200 mb-4">Alert History</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-slate-300">
-              <tr>
-                <th className="text-left py-3 font-medium">Time</th>
-                <th className="text-left py-3 font-medium">Machine</th>
-                <th className="text-left py-3 font-medium">Alert</th>
-                <th className="text-left py-3 font-medium">Severity</th>
-                <th className="text-left py-3 font-medium">Status</th>
-                <th className="text-left py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alerts.map((a) => (
-                <tr key={a._id} className="border-t border-slate-700 hover:bg-slate-800/50 transition-colors">
-                  <td className="py-3 text-slate-400">{new Date(a.createdAt).toLocaleString()}</td>
-                  <td className="py-3 font-medium">{a.machineId || '-'}</td>
-                  <td className="py-3">{a.message}</td>
-                  <td className="py-3">
-                    <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${
-                      a.severity === 'critical' ? 'bg-red-700/70 text-red-100' :
-                      a.severity === 'high' ? 'bg-orange-700/60 text-orange-100' :
-                      a.severity === 'medium' ? 'bg-amber-700/60 text-amber-200' :
-                      'bg-slate-700 text-slate-200'
-                    }`}>
-                      {a.severity}
-                    </span>
-                  </td>
-                  <td className="py-3 text-slate-400">{a.status}</td>
-                  <td className="py-3">
-                    <button onClick={()=>remove(a._id)} title="Delete" className="p-1.5 bg-red-700/70 hover:bg-red-700 rounded text-white inline-flex items-center">
-                      <DeleteOutlineIcon fontSize="small" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Current Device Status */}
+      {deviceData && (
+        <div ref={statusRef} className="bg-slate-900 border-2 border-slate-600 rounded-xl p-6 shadow-xl">
+          <h2 className="text-xl font-semibold text-slate-200 mb-4">Current Device Status</h2>
+          <div className="grid md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-sm text-slate-300 mb-1 font-medium">Health Score</div>
+              <div className="text-2xl font-bold text-cyan-300">{deviceData.edge_health || 0}%</div>
+            </div>
+            <div>
+              <div className="text-sm text-slate-400 mb-1">Temperature</div>
+              <div className="text-lg font-semibold text-slate-200">
+                {deviceData.features?.temp_mean?.toFixed(2) || 'N/A'}°C
+              </div>
+            </div>
+            <div>
+              <div className="text-sm text-slate-400 mb-1">Vibration</div>
+              <div className="text-lg font-semibold text-slate-200">
+                {deviceData.features?.vib_rms?.toFixed(2) || 'N/A'} m/s²
+              </div>
+          </div>
+          <div>
+              <div className="text-sm text-slate-400 mb-1">Current</div>
+              <div className="text-lg font-semibold text-slate-200">
+                {deviceData.features?.current_rms?.toFixed(2) || 'N/A'} A
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 text-xs text-slate-400">
+            Last updated: {formatTimestamp(deviceData.timestamp)}
+          </div>
         </div>
+      )}
+
+      {/* Alerts Table */}
+      <div>
+        <h2 className="text-xl font-semibold text-slate-200 mb-4">Active Alerts</h2>
+        <AlertTable alerts={alerts} onAcknowledge={handleAcknowledge} />
+      </div>
+
+      {/* Alert Generation Info */}
+      <div className="bg-slate-900 border-2 border-slate-600 rounded-lg p-4 shadow-lg">
+        <div className="text-sm text-slate-400">
+          <strong className="text-slate-300">Note:</strong> Alerts are automatically generated based on:
+        </div>
+        <ul className="text-sm text-slate-500 mt-2 ml-4 list-disc space-y-1">
+          <li>Feature values exceeding configured thresholds</li>
+          <li>Machine health status (edge_health) falling below safe levels</li>
+          <li>Real-time data from device PM_001</li>
+        </ul>
       </div>
     </div>
   )
 }
-
-

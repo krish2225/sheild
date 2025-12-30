@@ -2,7 +2,7 @@ import ShieldLogo from './ShieldLogo'
 
 export default function Footer() {
   return (
-    <footer className="bg-slate-900/90 border-t border-slate-700 mt-auto w-full h-[20vh] min-h-[160px] flex items-center">
+    <footer className="bg-slate-900 border-t-2 border-slate-600 mt-auto w-full h-[20vh] min-h-[160px] flex items-center">
       <div className="max-w-7xl mx-auto px-6 py-4 w-full">
         <div className="h-full w-full flex flex-col items-center justify-center gap-2">
           <div className="text-slate-400 text-xs md:text-sm text-center">

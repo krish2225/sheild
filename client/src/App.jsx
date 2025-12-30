@@ -1,99 +1,127 @@
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { gsap } from 'gsap'
 import { useAuth } from './store/auth'
 import Login from './pages/Login'
-import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
-import Machines from './pages/Machines'
-import MachineDetail from './pages/MachineDetail'
-import Predictions from './pages/Predictions'
-import Maintenance from './pages/Maintenance'
-import Reports from './pages/Reports'
+import DeviceDetail from './pages/DeviceDetail'
+import Analytics from './pages/Analytics'
 import Alerts from './pages/Alerts'
-import Thresholds from './pages/Thresholds'
-import Feedback from './pages/Feedback'
 import Landing from './pages/Landing'
-import UserDashboard from './pages/UserDashboard'
 import Footer from './components/Footer'
 import ShieldLogoWithText from './components/ShieldLogo'
+import ErrorBoundary from './components/ErrorBoundary'
 
 const queryClient = new QueryClient()
 
-const Page = ({ title }) => (
-  <div className="p-6">
-    <h1 className="text-2xl font-semibold text-cyan-300">{title}</h1>
-    <div className="mt-4 text-slate-300">Coming soon...</div>
-  </div>
-)
-
 const AppLayout = ({ children }) => {
-  const { fetchMe, token } = useAuth()
-  useEffect(() => { if (token) fetchMe() }, [token])
+  const { token } = useAuth()
   return (
     <div className="min-h-screen app-gradient flex flex-col">
-      <nav className="sticky top-0 z-10 glass-effect border-b border-slate-700 shadow-professional">
+      <nav className="sticky top-0 z-10 glass-effect border-b-2 border-slate-700 shadow-professional">
         <div className="w-full px-6 py-4 flex items-center gap-8">
-          <Link to="/admin" className="flex items-center">
+          <Link to="/dashboard" className="flex items-center">
             <ShieldLogoWithText size={48} showText={true} />
           </Link>
           <div className="text-base font-medium text-slate-200 flex gap-6">
-            <Link to="/admin" className="hover:text-cyan-300 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-slate-800/50">Dashboard</Link>
-            <Link to="/machines" className="hover:text-cyan-300 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-slate-800/50">Machines</Link>
-            <Link to="/predictions" className="hover:text-cyan-300 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-slate-800/50">Predictions</Link>
-            <Link to="/maintenance" className="hover:text-cyan-300 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-slate-800/50">Maintenance</Link>
-            <Link to="/reports" className="hover:text-cyan-300 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-slate-800/50">Reports</Link>
-            <Link to="/alerts" className="hover:text-cyan-300 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-slate-800/50">Alerts</Link>
-            <Link to="/thresholds" className="hover:text-cyan-300 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-slate-800/50">Thresholds</Link>
-            <Link to="/feedback" className="hover:text-cyan-300 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-slate-800/50">Feedback</Link>
+            <Link to="/dashboard" className="hover:text-cyan-300 transition-all duration-200 px-3 py-2 rounded-lg hover:bg-slate-800 hover:scale-105">Dashboard</Link>
+            <Link to="/device/PM_001" className="hover:text-cyan-300 transition-all duration-200 px-3 py-2 rounded-lg hover:bg-slate-800 hover:scale-105">Device Detail</Link>
+            <Link to="/analytics" className="hover:text-cyan-300 transition-all duration-200 px-3 py-2 rounded-lg hover:bg-slate-800 hover:scale-105">Analytics</Link>
+            <Link to="/alerts" className="hover:text-cyan-300 transition-all duration-200 px-3 py-2 rounded-lg hover:bg-slate-800 hover:scale-105">Alerts</Link>
           </div>
           <div className="ml-auto text-base text-slate-200">
             {token ? (
-              <button onClick={() => useAuth.getState().logout()} className="px-6 py-2.5 rounded-lg bg-slate-800 border border-slate-600 hover:bg-slate-700 hover:border-slate-500 transition-colors font-medium">Logout</button>
+              <button onClick={() => useAuth.getState().logout()} className="px-6 py-2.5 rounded-lg bg-slate-800 border-2 border-slate-600 hover:bg-slate-700 hover:border-slate-500 transition-all font-medium hover:scale-105 shadow-lg text-white">Logout</button>
             ) : (
-              <div className="flex items-center gap-6">
-                <Link to="/login" className="hover:text-cyan-300 transition-colors font-medium">Login</Link>
-                <Link to="/register" className="hover:text-cyan-300 transition-colors font-medium">Sign up</Link>
-              </div>
+              <Link to="/login" className="hover:text-cyan-300 transition-colors font-medium">Login</Link>
             )}
           </div>
         </div>
       </nav>
-      <main className="flex-1 w-full px-4 sm:px-6 overflow-x-hidden">{children}</main>
+      <PageTransition>
+        <main className="flex-1 w-full px-4 sm:px-6 overflow-x-hidden">{children}</main>
+      </PageTransition>
       <Footer />
     </div>
   )
 }
 
 const RequireAuth = ({ children }) => {
-  const { token } = useAuth()
+  const { token, loading } = useAuth()
   const location = useLocation()
+  
+  // Wait for auth to initialize
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-slate-300">Loading...</div>
+      </div>
+    )
+  }
+  
   if (!token) return <Navigate to="/login" state={{ from: location }} replace />
   return children
 }
 
+const PageTransition = ({ children }) => {
+  const location = useLocation()
+  const containerRef = useRef(null)
+  const prevPathRef = useRef(location.pathname)
+
+  useEffect(() => {
+    // Only animate on route change, not on data updates
+    if (prevPathRef.current !== location.pathname) {
+      prevPathRef.current = location.pathname
+      if (containerRef.current) {
+        gsap.fromTo(containerRef.current, {
+          opacity: 0,
+          y: 20
+        }, {
+          opacity: 1,
+          y: 0,
+          duration: 0.4,
+          ease: 'power2.out'
+        })
+      }
+    }
+  }, [location.pathname])
+
+  return <div ref={containerRef}>{children}</div>
+}
+
 function App() {
+  // Initialize auth on app start
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        if (token) {
+          await useAuth.getState().fetchMe()
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error)
+      }
+    }
+    initAuth()
+  }, [])
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/admin" element={<RequireAuth><AppLayout><Dashboard /></AppLayout></RequireAuth>} />
-          <Route path="/user" element={<RequireAuth><AppLayout><UserDashboard /></AppLayout></RequireAuth>} />
-          <Route path="/machines" element={<RequireAuth><AppLayout><Machines /></AppLayout></RequireAuth>} />
-          <Route path="/machines/:machineId" element={<RequireAuth><AppLayout><MachineDetail /></AppLayout></RequireAuth>} />
-          <Route path="/predictions" element={<RequireAuth><AppLayout><Predictions /></AppLayout></RequireAuth>} />
-          <Route path="/maintenance" element={<RequireAuth><AppLayout><Maintenance /></AppLayout></RequireAuth>} />
-          <Route path="/reports" element={<RequireAuth><AppLayout><Reports /></AppLayout></RequireAuth>} />
-          <Route path="/alerts" element={<RequireAuth><AppLayout><Alerts /></AppLayout></RequireAuth>} />
-          <Route path="/thresholds" element={<RequireAuth><AppLayout><Thresholds /></AppLayout></RequireAuth>} />
-          <Route path="/feedback" element={<RequireAuth><AppLayout><Feedback /></AppLayout></RequireAuth>} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/dashboard" element={<RequireAuth><AppLayout><Dashboard /></AppLayout></RequireAuth>} />
+            <Route path="/device/:deviceId" element={<RequireAuth><AppLayout><DeviceDetail /></AppLayout></RequireAuth>} />
+            <Route path="/analytics" element={<RequireAuth><AppLayout><Analytics /></AppLayout></RequireAuth>} />
+            <Route path="/alerts" element={<RequireAuth><AppLayout><Alerts /></AppLayout></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   )
 }
 
