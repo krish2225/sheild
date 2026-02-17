@@ -68,7 +68,7 @@ export default function Login() {
       <div className="flex-1 flex items-center justify-center px-4">
         <form ref={formRef} onSubmit={onSubmit} className="w-full max-w-md sm:max-w-lg md:max-w-xl bg-slate-900 border-2 border-slate-600 rounded-2xl p-6 sm:p-8 shadow-2xl hover:shadow-2xl hover:shadow-cyan-500 transition-all">
           <h1 className="text-2xl font-semibold text-cyan-300">Sign in</h1>
-          <p className="text-slate-400 text-base">Mock authentication - any credentials will work</p>
+          <p className="text-slate-400 text-base">Enter your credentials to access Shield IoT</p>
           <div className="mt-6 space-y-4">
             <div>
               <label className="block text-base text-slate-300 mb-1">Email</label>

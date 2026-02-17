@@ -17,19 +17,12 @@ export const useAuth = create((set, get) => ({
   async login(email, password) {
     set({ loading: true, error: null })
     try {
-      // MOCK AUTHENTICATION - No backend auth yet
-      // Accept any email/password combination for trial phase
-      const mockUser = {
-        id: 'user_001',
-        email: email,
-        role: 'admin',
-        name: email.split('@')[0]
-      }
-      const mockToken = 'mock_token_' + Date.now()
+      const response = await api.post('/auth/login', { email, password })
+      const { token, user } = response.data.data
       
-      localStorage.setItem('token', mockToken)
-      localStorage.setItem('user', JSON.stringify(mockUser))
-      set({ user: mockUser, token: mockToken, loading: false })
+      localStorage.setItem('token', token)
+      localStorage.setItem('user', JSON.stringify(user))
+      set({ user, token, loading: false })
       return true
     } catch (e) {
       set({ error: e?.response?.data?.message || e.message || 'Login failed', loading: false })
@@ -37,21 +30,20 @@ export const useAuth = create((set, get) => ({
     }
   },
   async fetchMe() {
-    // Mock auth - no backend call needed
-    // User is already set during login
     const token = get().token
-    if (token) {
-      const storedUser = localStorage.getItem('user')
-      const user = storedUser ? JSON.parse(storedUser) : (get().user || {
-        id: 'user_001',
-        email: 'user@example.com',
-        role: 'admin',
-        name: 'User'
-      })
-      set({ user })
-      if (!storedUser) {
-        localStorage.setItem('user', JSON.stringify(user))
-      }
+    if (!token) return
+    
+    set({ loading: true })
+    try {
+      const response = await api.get('/auth/me')
+      const { user } = response.data.data
+      localStorage.setItem('user', JSON.stringify(user))
+      set({ user, loading: false })
+    } catch (e) {
+      // If token is invalid, clear it
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      set({ user: null, token: null, loading: false })
     }
   },
   logout() {
